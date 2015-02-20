@@ -1,0 +1,23 @@
+{
+    "name": "davidpersson/li3_translate",
+    "type": "lithium-library",
+    "description": "A translate behavior for the Lithium PHP framework",
+    "keywords": ["translate", "g11n", "behavior", "lithium", "li3", "php"],
+    "homepage": "https://github.com/davidpersson/li3_translate",
+    "license": "BSD-3-Clause",
+    "minimum-stability": "dev",
+    "authors": [
+        {
+            "name": "David Persson",
+            "homepage": "https://github.com/davidpersson"
+        },
+        {
+            "name": "Richard McIntyre",
+            "homepage": "https://github.com/mackstar"
+        }
+    ],
+    "require": {
+        "php": ">=5.3",
+        "composer/installers": "~1.0"
+    }
+}
