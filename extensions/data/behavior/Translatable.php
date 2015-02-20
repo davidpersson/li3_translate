@@ -8,7 +8,6 @@
 
 namespace li3_translate\extensions\data\behavior;
 
-use lithium\data\source\MongoDb;
 use lithium\util\Set;
 use lithium\core\Environment;
 
