@@ -41,24 +41,24 @@ class Translatable extends \lithium\core\StaticObject {
 	 *
 	 * @var string $class The current model class
 	 * @var array $config Configuration options for the behavior
-	 * @return 
+	 * @return
 	 */
 	public static function bind($class, array $config = array()) {
 
 		$defaults = array();
 		$config += $defaults;
 		static::$_configurations = $config;
-		
+
 		static::_save($class);
 		static::_find($class);
 		static::_validates($class);
-		
+
 		return static::$_configurations[$class] = $config;
 	}
 
 	/**
 	 * A protected function to apply our filter to the classes save method.
-	 * we add a locale offset to the entity 
+	 * we add a locale offset to the entity
 	 *
 	 * @var class The model class to which the _save filter is applied
 	 * @return mixed Upon success the current document will be returned. On fail false.
@@ -72,18 +72,18 @@ class Translatable extends \lithium\core\StaticObject {
 		} else {
 			$default = Environment::get('locale') ?: null;
 		}
-		
+
 		if (isset(static::$_configurations['locales'])) {
 			$locales = static::$_configurations['locales'];
 		} else {
 			$locales = array_keys(Environment::get('locales')) ?: null;
 		}
 
-		$class::applyFilter('save', 
+		$class::applyFilter('save',
 			function($self, $params, $chain) use ($classes, $fields, $locales, $default) {
 
 			$entity = $params['entity'];
-			
+
 			if($params['data']) {
 				$entity->set($params['data']);
 				$params['data'] = null;
@@ -93,8 +93,8 @@ class Translatable extends \lithium\core\StaticObject {
 			// content.
 			if (!isset($entity->locale)) {
 				$localePresent = array_map(
-					function($key) use ($entity) { 
-						return array_key_exists($key, $entity->data()); 
+					function($key) use ($entity) {
+						return array_key_exists($key, $entity->data());
 					}, $locales);
 				if (!in_array(true, $localePresent) && !isset($default)) {
 					$entity->errors('locale', 'Locale has not been set.');
@@ -188,7 +188,7 @@ class Translatable extends \lithium\core\StaticObject {
 			if (!isset($entityLocalizedSet) && !in_array($validation_locale, $dbLocalizations)) {
 				$localizedSet[] = $data;
 			}
-			
+
 			// If saving multiple translations at once
 			if (!$entity->_id && isset($entityLocalizedSet)) {
 				$localizedSet = $entityLocalizedSet;
@@ -205,9 +205,9 @@ class Translatable extends \lithium\core\StaticObject {
 
 			$entity->localizations = $localizedSet;
 			$entity->validation = $validation_locale;
-			
-			unset($entity->$validation_locale); 
-			
+
+			unset($entity->$validation_locale);
+
 			foreach($fields as $key){
 				unset($entity->$key);
 			}
@@ -235,7 +235,7 @@ class Translatable extends \lithium\core\StaticObject {
 			$locales = array_keys(Environment::get('locales')) ?: null;
 		}
 		$class::applyFilter('find', function($self, $params, $chain) use ($fields, $locales) {
-			
+
 			if (isset($params['options']['Ignore-Locale'])) {
 				unset($params['options']['Ignore-Locale']);
 				return $chain->next($self, $params, $chain);
@@ -247,7 +247,7 @@ class Translatable extends \lithium\core\StaticObject {
 				$params['options']['conditions']['locale'] = $params['options']['locale'];
 			}
 
-			// Need to parse the options find options as needed to keep 
+			// Need to parse the options find options as needed to keep
 			$options = $class::parseOptions($params['options'], $fields, $locales);
 			$params['options'] = $options;
 			$result = $chain->next($self, $params, $chain);
@@ -258,7 +258,7 @@ class Translatable extends \lithium\core\StaticObject {
 			if (is_int($result)) {
 				return $result;
 			}
-			
+
 			// Otherwise send it to the result parser which will output it as needed.
 			$function = $class::formatReturnDocument($options, $fields);
 			if ($params['type'] == 'all' || $params['type'] == 'search') {
@@ -273,7 +273,7 @@ class Translatable extends \lithium\core\StaticObject {
 	 * A protected method to override model validates.
 	 * We take a validation key to get get the record we want to validate, this could be hard in the
 	 * case of multi locale saving. But I think we really need to do 1 at a time.
-	 * 
+	 *
 	 * @param string $class The current called model class to which the _validates filter is applied.
 	 * @return boolean The result of the validation result
 	 */
@@ -303,9 +303,9 @@ class Translatable extends \lithium\core\StaticObject {
 	}
 
 	/**
-	 * Returns a closure that formats the returned document to either include all locales 
+	 * Returns a closure that formats the returned document to either include all locales
 	 * or to just to return the single record output.
-	 * 
+	 *
 	 * @param array $options Original find options to mainly get the locale needed to return
 	 * @param array $fields The fields to which translatability is applies
 	 * @return closure Contains logic needed to parse a single result correctly.
@@ -322,7 +322,7 @@ class Translatable extends \lithium\core\StaticObject {
 				if(!empty($localizationData)) {
 					$locale = $localization->locale;
 					$fields[] = 'locale';
-				
+
 					if (isset($options['locale']) && $options['locale'] == $locale) {
 						foreach($fields as $key){
 							$result->$key = $localization->$key;
@@ -350,24 +350,24 @@ class Translatable extends \lithium\core\StaticObject {
 		foreach ($options as $option => $values) {
 			if (is_array($values) && !empty($values)) {
 				foreach ($values as $key => $args) {
-					
+
 					// If option has an argument key that starts with a localization
 					$hasLocalizedKey = (in_array(true, array_map( function($localization) use ($key) {
 						return (strpos($key, $localization . '.') !== false);
 					}, $locales)));
-					
+
 					if($hasLocalizedKey) {
 						list($locale, $optionKey) = explode('.', $key);
 						$array[$option][$subdocument . $optionKey] = $args;
 						$array[$option][$subdocument . 'locale'] = $locale;
 					}
-					
+
 					// If the option is part of the localized fields
 					$isLocalized = (in_array($key, $fields) || $key == 'locale');
 					if ($isLocalized) {
 						$array[$option][$subdocument . $key] = $args;
 					}
-					
+
 					if (!$isLocalized && !$hasLocalizedKey) {
 						$array[$option][$key] = $args;
 					}
