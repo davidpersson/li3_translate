@@ -17,7 +17,7 @@
         }
     ],
     "require": {
-        "php": ">=5.3",
+        "php": ">=5.5",
 		"unionofrad/lithium": "*",
         "composer/installers": "~1.0"
     }

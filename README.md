@@ -30,13 +30,13 @@ Libraries::add('li3_behaviors');
 Then in the model you wish to have translatable please add something to the tune of:
 
 ```
-protected $_actsAs = array(
-	'Translatable' => array(
+protected $_actsAs = [
+	'Translatable' => [
 		'default' => 'ja',
-		'locales' => array('en', 'it', 'ja'),
-		'fields' => array('name', 'profile')
-	)
-);
+		'locales' => ['en', 'it', 'ja'],
+		'fields' => ['name', 'profile']
+	]
+];
 ```
 
 * The default option is only necessary if you are saving multiple languages in one create or save command. A base language of which to gather the content and validate against is needed. This ensures that your validations will still work.
@@ -86,7 +86,7 @@ Locale Option
 The locale option will return the set local record only. It will also search that locale only.
 
 ```
-$user = Users::first(array('conditions' => array('name' => 'Richard'), 'locale' => 'en'));
+$user = Users::first(['conditions' => ['name' => 'Richard'], 'locale' => 'en']);
 ```
 
 To retrieve the data it is as normal
@@ -101,14 +101,14 @@ Saving Locales Later
 It is very easy to add a locale to an existing record, either of the following will work.
 
 ```
-$user = Users::first(array('conditions' => array('name' => 'Richard', 'locale' => 'en')));
-$user->save(array('locale' => 'it', 'name' => 'Ricardo'));
+$user = Users::first(['conditions' => ['name' => 'Richard', 'locale' => 'en']]);
+$user->save(['locale' => 'it', 'name' => 'Ricardo']);
 ```
 
 Or of course by assigning the properties
 
 ```
-$user = Users::first(array('conditions' => array('name' => 'Richard', 'locale' => 'en')));
+$user = Users::first(['conditions' => ['name' => 'Richard', 'locale' => 'en']]);
 $user->locale = 'it';
 $user->name = 'Ricardo';
 $user->save();
@@ -120,12 +120,12 @@ Saving More Than One Locale At A Time
 This can be done as simply as:
 
 ```
-$user = Users::create(array(
+$user = Users::create([
 	'ja.name'=>'リチャード', 
 	'en.name'=>'Richard', 
 	'it.name'=>'Ricardo', 
 	'non_localized_field' => 'Here is something interesting.'
-));
+]);
 $user->save();
 ```
 * In order to use this saving style a validation locale key is needed in the configuration.
@@ -136,13 +136,13 @@ Other ways to find
 You can also use the convenient style below to find content:
 
 ```
-$users = Users::all(array('conditions' => array('it.name' => 'Ricardo')));
+$users = Users::all(['conditions' => ['it.name' => 'Ricardo']]);
 ```
 
 If you do not know the translation you are searching for, the locales are kept in the reserved key `locales` field and can be searched by the following:
 
 ```
-$users = Users::all(array('conditions' => array('locales.name' => 'Ricardo')));
+$users = Users::all(['conditions' => ['locales.name' => 'Ricardo']]);
 ```
 
 Both of these will of course return all locales.

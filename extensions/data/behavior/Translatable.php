@@ -24,16 +24,16 @@ class Translatable extends \lithium\core\StaticObject {
 	 *
 	 * @var array
 	 */
-	protected static $_configurations = array();
+	protected static $_configurations = [];
 
 	/**
 	 * Class dependencies.
 	 *
 	 * @var array
 	 */
-	protected static $_classes = array(
+	protected static $_classes = [
 		'entity' => 'lithium\data\entity\Document'
-	);
+	];
 
 	/**
 	 * A binding method to grab the class in question, with which you can alter the configuration
@@ -43,9 +43,9 @@ class Translatable extends \lithium\core\StaticObject {
 	 * @var array $config Configuration options for the behavior
 	 * @return
 	 */
-	public static function bind($class, array $config = array()) {
+	public static function bind($class, array $config = []) {
 
-		$defaults = array();
+		$defaults = [];
 		$config += $defaults;
 		static::$_configurations = $config;
 
@@ -109,7 +109,7 @@ class Translatable extends \lithium\core\StaticObject {
 			$entityData = $entity->data();
 
 			$processFields = function($fields, $entityData, $locale) use ($entity) {
-				$data = array();
+				$data = [];
 				$entityData['locale'] = $locale;
 
 				// Add to data directly from the entity data or from the presaved localization.
@@ -141,8 +141,8 @@ class Translatable extends \lithium\core\StaticObject {
 			}
 			else {
 				$validation_locale = $default;
-				$entityLocalizedSet = array();
-				$saveLocalizations = array();
+				$entityLocalizedSet = [];
+				$saveLocalizations = [];
 				foreach($locales as $locale){
 					if (isset($entityData[$locale])) {
 						$saveLocalizations[] = $locale;
@@ -159,10 +159,10 @@ class Translatable extends \lithium\core\StaticObject {
 
 			// Should the record exist we need overwrite the localized data if the localization already
 			// exists. If the localization doesn't exist we add the data to the localization array.
-			$localizedSet = array();
-			$dbLocalizations = array();
+			$localizedSet = [];
+			$dbLocalizations = [];
 			if ($entity->exists() && $record = $self::find(
-				(string) $entity->_id, array('Ignore-Locale'=> true)
+				(string) $entity->_id, ['Ignore-Locale'=> true]
 			)) {
 				foreach($record->localizations as $localization) {
 					$locale = $localization->locale;
@@ -345,7 +345,7 @@ class Translatable extends \lithium\core\StaticObject {
 	 */
 	public static function parseOptions($options, $fields, $locales) {
 		$subdocument = 'localizations.';
-		$array = array();
+		$array = [];
 
 		foreach ($options as $option => $values) {
 			if (is_array($values) && !empty($values)) {
