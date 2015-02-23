@@ -1,10 +1,3 @@
----
-title: li3_translate : a Lithium Translatable Behavior
-subtitle: Translatable content for your Lithium Application
-author: Richard McIntyre - @mackstar
-
----
-
 Lithium the most RAD PHP Framework Translatable Behavior
 ========================================================
 
