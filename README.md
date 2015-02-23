@@ -1,35 +1,38 @@
 Lithium the most RAD PHP Framework Translatable Behavior
 ========================================================
 
-This plugin is easiest to use when used in combination with the li3_behaviors plugin.
-
 What this behavior does is enable you to have content of different locales/languages to be stored in your MongoDB database via your lithium based model. You can also search and retrieve locale specific data simply. 
 
 * At this moment the plugin is only compatible with MongoDB.
 
 If somebody wanted to make it adaptable then other data sources could be supported in the future.
 
+Installation
+------------
+Install the plugin via composer (this will also pull in any dependencies):
+```shell
+`composer require davidpersson/li3_translate
+```
+
 Usage
 -----
+In the model you wish to have translatable please add something to the tune of:
 
-Please install li3_behaviors first then add the following to your libraries.php or where ever else you add your lithium libraries.
+```php
+// ...
+class Artists extends \lithium\data\Model {
 
-```
-Libraries::add('li3_translate');
-Libraries::add('li3_behaviors');
-````
-* GOTCHA Please follow instructions for li3_behaviors correctly.
+   use li3_behaviors\data\model\Behaviors;
 
-Then in the model you wish to have translatable please add something to the tune of:
-
-```
-protected $_actsAs = [
-	'Translatable' => [
-		'default' => 'ja',
-		'locales' => ['en', 'it', 'ja'],
-		'fields' => ['name', 'profile']
-	]
-];
+   protected static $_actsAs = [
+       'Translatable' => [
+           'default' => 'ja',
+           'locales' => ['en', 'it', 'ja'],
+           'fields' => ['name', 'profile']
+       ]
+   ];
+	
+   // ...
 ```
 
 * The default option is only necessary if you are saving multiple languages in one create or save command. A base language of which to gather the content and validate against is needed. This ensures that your validations will still work.

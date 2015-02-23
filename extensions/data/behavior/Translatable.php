@@ -16,75 +16,62 @@ use lithium\core\Environment;
  * into a language namespace for that record. This also needs to deal with validation to make sure
  * the model acts as expected in all scenarios.
  */
-class Translatable extends \lithium\core\StaticObject {
+class Translatable extends \li3_behaviors\data\model\Behavior {
 
 	/**
-	 * An array of configurations indexed by model class name, for each model to which this class
-	 * is bound.
+	 * Default configurations.
+	 *
+	 * The `'default'` option is only necessary if you are saving multiple languages in one
+	 * create or save command. A base language of which to gather the content and validate
+	 * against is needed. This ensures that your validations will still work. Defaults to
+	 * the current effective locale (via `Environment::get('locale')`).
+	 *
+	 * The `'locales'` that you want to use is fairly self explanatory, it simply tells the plugin
+	 * which languages you want support for.  Defaults to the current available locales
+	 * (via `Environment::get('locales')`).
+	 *
+	 * So as not to double up on too much data. The `'fields'` array tells the behavior which
+	 * fields will need localizations. Those that are not included here will be simple
+	 * fields which will not be attached a locale.
 	 *
 	 * @var array
 	 */
-	protected static $_configurations = [];
-
-	/**
-	 * Class dependencies.
-	 *
-	 * @var array
-	 */
-	protected static $_classes = [
-		'entity' => 'lithium\data\entity\Document'
+	protected static $_defaults = [
+		'default' => null,
+		'locales' => [],
+		'fields' => []
 	];
 
-	/**
-	 * A binding method to grab the class in question, with which you can alter the configuration
-	 * and apply filters to
-	 *
-	 * @var string $class The current model class
-	 * @var array $config Configuration options for the behavior
-	 * @return
-	 */
-	public static function bind($class, array $config = []) {
-
-		$defaults = [];
+	protected static function _config($model, $behavior, $config, $defaults) {
 		$config += $defaults;
-		static::$_configurations = $config;
 
-		static::_save($class);
-		static::_find($class);
-		static::_validates($class);
+		if (!$config['default']) {
+			$config['default'] = Environment::get('locale');
+		}
+		if (!$config['locales']) {
+			$config['locales'] = array_keys(Environment::get('locales'));
+		}
+		return $config;
+	}
 
-		return static::$_configurations[$class] = $config;
+	protected static function _filters($model, $behavior) {
+		static::_save($model, $behavior);
+		static::_find($model, $behavior);
+		static::_validates($model, $behavior);
 	}
 
 	/**
 	 * A protected function to apply our filter to the classes save method.
 	 * we add a locale offset to the entity
-	 *
-	 * @var class The model class to which the _save filter is applied
-	 * @return mixed Upon success the current document will be returned. On fail false.
 	 */
-	protected static function _save($class){
-
-		$classes = static::$_classes;
-		$fields = static::$_configurations['fields'];
-		if (isset(static::$_configurations['default'])) {
-			$default = static::$_configurations['default'];
-		} else {
-			$default = Environment::get('locale') ?: null;
-		}
-
-		if (isset(static::$_configurations['locales'])) {
-			$locales = static::$_configurations['locales'];
-		} else {
-			$locales = array_keys(Environment::get('locales')) ?: null;
-		}
-
-		$class::applyFilter('save',
-			function($self, $params, $chain) use ($classes, $fields, $locales, $default) {
-
+	protected static function _save($model, $behavior) {
+		$model::applyFilter('save', function($self, $params, $chain) use ($model, $behavior) {
 			$entity = $params['entity'];
+			$fields = $behavior->config('fields');
+			$default = $behavior->config('default');
+			$locales = $behavior->config('locales');
 
-			if($params['data']) {
+			if ($params['data']) {
 				$entity->set($params['data']);
 				$params['data'] = null;
 			}
@@ -223,32 +210,22 @@ class Translatable extends \lithium\core\StaticObject {
 	 * We grab the document from the documents as needed and pass them to you in language specific
 	 * output. If you pass a locale option we return only the document for that locale. If you only
 	 * want to search a locale but return all locales then pass locale as a condition.
-	 *
-	 * @param string $class The current called model class to which the find filter is applied.
-	 * @return mixed An integer/document or document set from the current find.
 	 */
-	protected static function _find($class){
-		$fields = static::$_configurations['fields'];
-		if (isset(static::$_configurations['locales'])) {
-			$locales = static::$_configurations['locales'];
-		} else {
-			$locales = array_keys(Environment::get('locales')) ?: null;
-		}
-		$class::applyFilter('find', function($self, $params, $chain) use ($fields, $locales) {
+	protected static function _find($model, $behavior) {
+		$model::applyFilter('find', function($self, $params, $chain) use ($behavior) {
+			$fields = $behavior->config('fields');
 
 			if (isset($params['options']['Ignore-Locale'])) {
 				unset($params['options']['Ignore-Locale']);
 				return $chain->next($self, $params, $chain);
 			}
 
-			$class = __CLASS__;
-
 			if (isset($params['options']['locale'])) {
 				$params['options']['conditions']['locale'] = $params['options']['locale'];
 			}
 
 			// Need to parse the options find options as needed to keep
-			$options = $class::parseOptions($params['options'], $fields, $locales);
+			$options = static::_parseOptions($params['options'], $fields, $locales);
 			$params['options'] = $options;
 			$result = $chain->next($self, $params, $chain);
 
@@ -260,7 +237,7 @@ class Translatable extends \lithium\core\StaticObject {
 			}
 
 			// Otherwise send it to the result parser which will output it as needed.
-			$function = $class::formatReturnDocument($options, $fields);
+			$function = static::_formatReturnDocument($options, $fields);
 			if ($params['type'] == 'all' || $params['type'] == 'search') {
 				$result->each($function);
 				return $result;
@@ -273,12 +250,9 @@ class Translatable extends \lithium\core\StaticObject {
 	 * A protected method to override model validates.
 	 * We take a validation key to get get the record we want to validate, this could be hard in the
 	 * case of multi locale saving. But I think we really need to do 1 at a time.
-	 *
-	 * @param string $class The current called model class to which the _validates filter is applied.
-	 * @return boolean The result of the validation result
 	 */
-	protected static function _validates($class) {
-		$class::applyFilter('validates', function($self, $params, $chain) {
+	protected static function _validates($model, $behavior) {
+		$model::applyFilter('validates', function($self, $params, $chain) {
 			$origEntity = $params['entity'];
 			$entity = clone $params['entity'];
 			foreach($entity->localizations as $localization) {
@@ -310,10 +284,8 @@ class Translatable extends \lithium\core\StaticObject {
 	 * @param array $fields The fields to which translatability is applies
 	 * @return closure Contains logic needed to parse a single result correctly.
 	 */
-	public static function formatReturnDocument($options, $fields) {
-
+	protected static function _formatReturnDocument($options, $fields) {
 		return function($result) use ($options, $fields) {
-
 			if (!is_object($result) && !isset($result->localizations)) {
 				return $result;
 			}
@@ -343,7 +315,7 @@ class Translatable extends \lithium\core\StaticObject {
 	 * @param array $fields The fields to which translatability is applies
 	 * @return array The parsed options.
 	 */
-	public static function parseOptions($options, $fields, $locales) {
+	protected static function _parseOptions($options, $fields, $locales) {
 		$subdocument = 'localizations.';
 		$array = [];
 

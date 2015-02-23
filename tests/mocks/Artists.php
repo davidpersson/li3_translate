@@ -2,10 +2,10 @@
 
 namespace li3_translate\tests\mocks;
 
-use li3_behaviors\extensions\model\Behaviors;
+class Artists extends \lithium\data\Model {
 
-class Artists extends \li3_behaviors\extensions\Model {
-	
+	use li3_behaviors\data\model\Behaviors;
+
 	public $validates = [
 		'name' => [
 			['notEmpty', 'message' => 'Username should not be empty.'],
