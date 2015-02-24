@@ -1,5 +1,5 @@
-Lithium the most RAD PHP Framework Translatable Behavior
-========================================================
+# Translatable Behavior
+### for the Lithium PHP Framework
 
 What this behavior does is enable you to have content of different locales/languages to be stored in your MongoDB database via your lithium based model. You can also search and retrieve locale specific data simply. 
 
@@ -7,15 +7,15 @@ What this behavior does is enable you to have content of different locales/langu
 
 If somebody wanted to make it adaptable then other data sources could be supported in the future.
 
-Installation
-------------
+## Installation
+
 Install the plugin via composer (this will also pull in any dependencies):
 ```shell
-`composer require davidpersson/li3_translate
+composer require davidpersson/li3_translate
 ```
 
-Usage
------
+## Usage
+
 In the model you wish to have translatable please add something to the tune of:
 
 ```php
@@ -28,14 +28,14 @@ class Artists extends \lithium\data\Model {
        'Translatable' => [
            'default' => 'ja',
            'locales' => ['en', 'it', 'ja'],
-           'fields' => ['name', 'profile']
+           'fields' => ['name']
        ]
    ];
 	
    // ...
 ```
 
-* The default option is only necessary if you are saving multiple languages in one create or save command. A base language of which to gather the content and validate against is needed. This ensures that your validations will still work.
+* The default option is required, espececially if you are saving multiple languages in one create or save command. A base language of which to gather the content and validate against is needed. This ensures that your validations will still work.
 
 * The locales that you want to use is fairly self explanatory, it simply tells the plugin which languages you want support for.
 
@@ -43,105 +43,142 @@ class Artists extends \lithium\data\Model {
 
 Good example usage of the plugin can be seen in the unit tests, but here is a brief description.
 
-Saving data
------------
+## Saving Data
 
-When saving data you can save it in the normal manner, if you are saving a single locale you can do so by
+When saving data with the default locale, you basically don't have to change anything. When saving translated data along with the original data use one of the following syntax (all are equivalent):
 
-```
-$user = Users::create(array('name'=>'Richard', 'profile'=>'Dreaded Rasta', 'locale' => 'en'));
-$user->save();
-```
-
-If you would like to search for this record you can do so by either using a locale condition or a locale option. I will explain the difference.
-
-Locale Condition
-----------------
-
-An example of using the condition is as below. It will successfully find the record saved above.
-
-```
-$user = Users::first(array('conditions' => array('name' => 'Richard', 'locale' => 'en')));
-```
-
-The record condition parameter has been set but the locale option has not been set so the query will return all available languages for us to use. You can retrieve the name below:
-
-```
-$user->en->name
-```
-
-But should their already exist for example a Japanese translation with the locale set to ja, you can get the Japanese name as follows:
-
-```
-$user->ja->name
-```
-
-Locale Option
--------------
-
-The locale option will return the set local record only. It will also search that locale only.
-
-```
-$user = Users::first(['conditions' => ['name' => 'Richard'], 'locale' => 'en']);
-```
-
-To retrieve the data it is as normal
-
-```
-$user->name
-```
-
-Saving Locales Later
---------------------
-
-It is very easy to add a locale to an existing record, either of the following will work.
-
-```
-$user = Users::first(['conditions' => ['name' => 'Richard', 'locale' => 'en']]);
-$user->save(['locale' => 'it', 'name' => 'Ricardo']);
-```
-
-Or of course by assigning the properties
-
-```
-$user = Users::first(['conditions' => ['name' => 'Richard', 'locale' => 'en']]);
-$user->locale = 'it';
-$user->name = 'Ricardo';
-$user->save();
-```
-
-Saving More Than One Locale At A Time
--------------------------------------
-
-This can be done as simply as:
-
-```
+```php
 $user = Users::create([
-	'ja.name'=>'リチャード', 
-	'en.name'=>'Richard', 
-	'it.name'=>'Ricardo', 
-	'non_localized_field' => 'Here is something interesting.'
+	'profile' => 'Dreaded Rasta',
+	'name' => 'Richard',
+	'i18n.name.it' => 'Ricardo'
 ]);
+
+$user = Users::create([
+	'name' => 'Richard',
+	'profile' => 'Dreaded Rasta',
+	'i18n' => [
+		'name' => [
+			'it' => 'Ricardo'
+		]
+	]
+]);
+
+$user = Users::create([
+	'profile' => 'Dreaded Rasta', 
+	'name' => 'Richard'
+]);
+$user->translate('name', 'it', 'Ricardo');
+```
+
+When _saving just translated data_ i.e. when updating an already existing record use the following syntax. Please note that in this case original data (for the default locale must already be present).
+
+```php
+$user = Users::find('first', ['conditions' => ['name' => 'Richard']]);
+
+$user->save([
+	'i18n.name.it' => 'Ricardo'
+]);
+
+// ... or ...
+
+$user->translate('name', 'it', 'Ricardo');
 $user->save();
 ```
-* In order to use this saving style a validation locale key is needed in the configuration.
 
-Other ways to find
-------------------
+## Retrieving translated Entities
 
-You can also use the convenient style below to find content:
+```php
+$user = Users::find('first', [
+	'conditions' => ['i18n.name.it' => 'Ricardo']
+]);
 
-```
-$users = Users::all(['conditions' => ['it.name' => 'Ricardo']]);
-```
-
-If you do not know the translation you are searching for, the locales are kept in the reserved key `locales` field and can be searched by the following:
-
-```
-$users = Users::all(['conditions' => ['locales.name' => 'Ricardo']]);
+$user = Users::find('all', [
+	'order' => ['i18n.name.it' => 'ASC']
+]);
 ```
 
-Both of these will of course return all locales.
+If you don't want to use the `translate()` method to translate single fields, but
+want the record translated into a single locale use the following syntax. You can
+then retrieve field data as normal.
+
+```php
+$user = Users::find('first', [
+	'conditions' => ['id' => 23],
+	'translate' => 'it'
+]);
+
+$user->name; // returns 'Ricardo'.
+```
+
+This is good for display purposes. For saving
+data use the syntax described above.
+
+If you do not know the translation you are searching for, the translation can be searched by the following:
+
+```
+$users = Users::all(['conditions' => ['i18n.name' => 'Ricardo']]);
+```
+
+## On-the-fly Disabling of Translations
+
+You can disable the automatic retrieval of translations for a record:
+```php
+$user = Users::find('first', [
+	'conditions' => ['name' => 'Richard'], 
+	'translate' => false
+]);
+```
+
+And disable running the behavior on save:
+```php
+$user->save(null, ['translate' => false]);
+```
+
+## Accessing Translations
+
+```php
+$user = Users::find('first', ['conditions' => ['name' => 'Richard']]);
+
+$user->translate('name', 'it'); // returns 'Ricardo';
+$user->translate('name'); // returns ['en' => 'Richard', 'it' => 'Ricardo'];
+$user->name; // returns 'Richard', as the default locale is `en`.
+```
+
+## Validation
+
+When translations are present in the to-be-saved data, all are validated against the base rule.
+
+```php
+$user = Users::create([
+	'profile' => 'Dreaded Rasta', 
+	'name' => 'Richard'
+]);
+$user->validate(['translate' => false]);
+
+```
+
+
+## Data Model
+
+Translation data is stored inline with the entity. For MongoDB a subdocument will used, for relational databases special field names are used. 
+
+`<user>`
+	- `name => Richard`
+	- `profile`
+	- `<i18n>`
+		- `name`
+			- `it => Ricardo`
+
+`<user>`
+	- `name => Richard`
+	- `profile`
+	- `i18n_name_it => Ricardo`
+
+## Gotchas
+
+You should not change the locale when the model already has saved data. Otherwise manual
+migration will be required.
 
 Bugs etc
 --------
