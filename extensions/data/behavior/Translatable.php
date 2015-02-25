@@ -42,6 +42,19 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			$connection = get_class($model::connection());
 			$config['strategy'] = $connection::enabled('arrays') ? 'nested' : 'inline';
 		}
+
+		if ($config['strategy'] === 'inline') {
+			foreach ($config['fields'] as $field) {
+				foreach ($config['locales'] as $locale) {
+					if ($locale === $config['locale']) {
+						continue;
+					}
+					if (!$model::hasField($field = static::_composeField($field, $locale))) {
+						throw new Exception("Model `{$model}` is missing translation field `{$field}`");
+					}
+				}
+			}
+		}
 		return $config;
 	}
 
