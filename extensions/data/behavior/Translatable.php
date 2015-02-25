@@ -8,6 +8,7 @@
 
 namespace li3_translate\extensions\data\behavior;
 
+use Exception;
 use lithium\core\Environment;
 
 /**
