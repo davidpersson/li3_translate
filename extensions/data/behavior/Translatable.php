@@ -97,7 +97,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		}
 		$entity->i18n[$field][$locale] = $value;
 
-		$entity = static::_sync($entity, $config['fields'], $config['locale']);
+		return true;
 	}
 
 	public function isTranslated($model, $behavior, $entity, $field) {
@@ -121,7 +121,8 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 				return $chain->next($self, $params, $chain);
 			}
 			$config = $behavior->config();
-			$entity = static::_sync($entity, $config['fields'], $config['locale']);
+			$entity = static::_syncFromI18n($entity, $config);
+			$entity = static::_syncToI18n($entity, $config);
 
 			// Should the record exist we need overwrite the localized data if the localization already
 			// exists. If the localization doesn't exist we add the data to the localization array.
@@ -168,10 +169,17 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		$model::applyFilter('find', function($self, $params, $chain) use ($behavior) {
 			$config = $behavior->config();
 
-			if (isset($params['options']['translate'])) {
-				if ($params['options']['translate'] === false) {
+			if (!isset($params['options']['translate'])) {
+				$translate = true;
+			} else {
+				if (($translate = $params['options']['translate']) === false) {
 					unset($params['options']['translate']);
 					return $chain->next($self, $params, $chain);
+				}
+				if (is_string($translate)) {
+					if (!in_array($translate, $config['locales'])) {
+						throw new Exception("Locale `{$translate}` not setup for translation in `{$model}`.");
+					}
 				}
 			}
 			// Rewrite all dot syntaxed paths conditions when using the inline
@@ -186,7 +194,11 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					$regex = '/i18n\.([a-z0-9_]+)\.([a-z_]{2,5})/is';
 
 					if (strpos($key, 'i18n.') === 0 && preg_match($regex, $key, $matches)) {
-						$key = static::_composeField($matches[1], $matches[2]);
+						if ($config['locale'] === $matches[2]) {
+							$key = $matches[1];
+						} else {
+							$key = static::_composeField($matches[1], $matches[2]);
+						}
 					}
 					$conditions[$key] = $value;
 				}
@@ -194,30 +206,32 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			}
 			$result = $chain->next($self, $params, $chain);
 
-			$format = function($entity) use ($config) {
+			$format = function($entity) use ($config, $translate) {
 				if ($config['strategy'] === 'nested') {
-					$entity->i18n = $entity->i18n->data();
+					$entity->set(['i18n' => $entity->i18n->data()]);
 				} else {
-					$entity->i18n = [];
+					$entity->set(['i18n' => []]);
 				}
-				foreach ($config['fields'] as $field) {
-					foreach ($config['locales'] as $locale) {
-						if ($locale === $config['locale']) {
-							$entity->i18n[$field][$locale] = $entity->{$field};
-							// The nested strategy should already have all translation ready
-							// in the i18n array except the non-redundant fields.
-						} elseif ($config['strategy'] === 'inline') {
-							$inline = static::_composeField($field, $locale);
-							$entity->i18n[$field][$locale] = $entity->{$inline};
+				$entity = static::_syncToI18n($entity, $config);
 
-							// In order to lower confusion as what happens assinging
-							// values to inline fields directly we'll remove them here.
-							unset($entity->{"i18n_{$field}_{$locale}"});
+				if (is_string($translate)) {
+					foreach ($entity->i18n as $field => $locales) {
+						foreach ($locales as $locale => $value) {
+							if ($translate === $locale) {
+								$entity->{$field} = $value;
+							}
 						}
 					}
+					// FIXME also unset inlined fields.
+					// unset($entity->i18n);
+					$entity->i18n = null;
 				}
+				return $entity;
 			};
-			if (is_object($result) && is_a($result, '\lithium\data\Collection')) {
+			if (!is_object($result)) {
+				return $result;
+			}
+			if (is_a($result, '\lithium\data\Collection')) {
 				return $result->each($format);
 			}
 			return $format($result);
@@ -231,7 +245,8 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 				return $chain->next($self, $params, $chain);
 			}
 			$config = $behavior->config();
-			$entity = static::_sync($entity, $config['fields'], $config['locale']);
+			$entity = static::_syncFromI18n($entity, $config);
+			$entity = static::_syncToI18n($entity, $config);
 
 			// Validate original fields, as well as any translation
 			// that are present. By default translation are sparse
@@ -266,18 +281,46 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		});
 	}
 
-	// Sync in both directions.
-	protected function _sync($entity, $fields, $locale) {
-		foreach ($entity->i18n as $key => $value) {
-			foreach ($value as $k => $v) {
-				if ($k === $locale) {
-					$entity->{$key} = $v;
+	// In order to allow access to both sides of fields (inside i18n and outside),
+	// we link those fields together. However one shouldn't assume that composed
+	// fields are available always.
+	protected static function _syncToI18n($entity, $config) {
+		foreach ($config['fields'] as $field) {
+			if (!isset($entity->{$field})) {
+				continue;
+			}
+			foreach ($config['locales'] as $locale) {
+				if ($locale === $config['locale']) {
+					$entity->i18n[$field][$locale] =& $entity->{$field};
+					// The nested strategy should already have all translation ready
+					// in the i18n array except the non-redundant fields.
+				} elseif ($config['strategy'] === 'inline') {
+					$inline = static::_composeField($field, $locale);
+					$entity->i18n[$field][$locale] =& $entity->{$inline};
 				}
 			}
 		}
-		foreach ($fields as $field) {
-			if (!empty($entity->{$field})) {
-				$entity->i18n[$field][$locale] = $entity->{$field};
+		return $entity;
+	}
+
+	protected static function _syncFromI18n($entity, $config) {
+		foreach ($config['fields'] as $field) {
+			foreach ($config['locales'] as $locale) {
+				if (!isset($entity->i18n[$field][$locale])) {
+					continue;
+				}
+				if ($locale === $config['locale']) {
+					$entity->{$field} =& $entity->i18n[$field][$locale];
+
+					if ($config['strategy'] == 'nested') {
+						// For this strategy not fields are stored outside i18n,
+						// except the original field.
+						break;
+					}
+				} elseif ($config['strategy'] === 'inline') {
+					$inline = static::_composeField($field, $locale);
+					$entity->{$inline} =& $entity->i18n[$field][$locale];
+				}
 			}
 		}
 		return $entity;
@@ -285,7 +328,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 
 	// In order to not save redundant data, we'll remove
 	// the default locale translations from the i18n array.
-	protected function _thin($entity, $fields, $locale) {
+	protected static function _thin($entity, $fields, $locale) {
 		foreach ($fields as $field) {
 			if (isset($entity->i18n[$field][$locale])) {
 				$entity->{$field} = $entity->i18n[$field][$locale];
