@@ -8,48 +8,39 @@
 
 namespace li3_translate\extensions\data\behavior;
 
-use lithium\util\Set;
 use lithium\core\Environment;
 
 /**
- * The `Translateable` class handles all translating MongoDB based content, the data is placed
- * into a language namespace for that record. This also needs to deal with validation to make sure
- * the model acts as expected in all scenarios.
+ * The `Translateable` class handles all translating based content, the data is placed into a
+ * i18n namespace for that record. This also needs to deal with validation to make sure the
+ * model acts as expected in all scenarios.
  */
 class Translatable extends \li3_behaviors\data\model\Behavior {
 
 	/**
 	 * Default configurations.
 	 *
-	 * The `'default'` option is only necessary if you are saving multiple languages in one
-	 * create or save command. A base language of which to gather the content and validate
-	 * against is needed. This ensures that your validations will still work. Defaults to
-	 * the current effective locale (via `Environment::get('locale')`).
-	 *
-	 * The `'locales'` that you want to use is fairly self explanatory, it simply tells the plugin
-	 * which languages you want support for.  Defaults to the current available locales
-	 * (via `Environment::get('locales')`).
-	 *
-	 * So as not to double up on too much data. The `'fields'` array tells the behavior which
-	 * fields will need localizations. Those that are not included here will be simple
-	 * fields which will not be attached a locale.
-	 *
 	 * @var array
 	 */
 	protected static $_defaults = [
-		'default' => null,
+		'locale' => null,
 		'locales' => [],
-		'fields' => []
+		'fields' => [],
+		'strategy' => null // either `inline` or `nested`
 	];
 
 	protected static function _config($model, $behavior, $config, $defaults) {
 		$config += $defaults;
 
-		if (!$config['default']) {
-			$config['default'] = Environment::get('locale');
+		if (!$config['locale']) {
+			$config['locale'] = Environment::get('locale');
 		}
 		if (!$config['locales']) {
 			$config['locales'] = array_keys(Environment::get('locales'));
+		}
+		if (!$config['strategy']) {
+			$connection = get_class($model::connection());
+			$config['strategy'] = $connection::enabled('arrays') ? 'nested' : 'inline';
 		}
 		return $config;
 	}
@@ -60,296 +51,241 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		static::_validates($model, $behavior);
 	}
 
-	/**
-	 * A protected function to apply our filter to the classes save method.
-	 * we add a locale offset to the entity
-	 */
+	public function translate($model, $behavior, $entity, $field, $locale = null, $value = null) {
+		$config = $behavior->config();
+
+		if (!in_array($field, $config['fields'])) {
+			throw new Exception("Field `{$field}` in model `{$model}` not available for translation.");
+		}
+		if ($locale === null) {
+			$result = $entity->i18n;
+			$result[$locale] = $entity->{$field};
+
+			return $result;
+		}
+		if (!in_array($locale, $config['locales'])) {
+			throw new Exception("Locale `{$locale}` not setup for translation of field `{$field}` in `{$model}`.");
+		}
+		if ($value === null) {
+			if (!isset($entity->i18n[$field][$locale])) {
+				// Prefer i18n over original.
+
+				if ($locale === $config['locale']) {
+					return $entity->{$field};
+				}
+				return null;
+			}
+			return $entity->i18n[$field][$locale];
+		}
+		if (!isset($entity->i18n)) {
+			// FIXME Move this into create filter?
+			$entity->i18n = [];
+		}
+		$entity->i18n[$field][$locale] = $value;
+
+		$entity = static::_sync($entity, $config['fields'], $config['locale']);
+	}
+
+	public function isTranslated($model, $behavior, $entity, $field) {
+		if (!in_array($field, $behavior->config('fields'))) {
+			throw new Exception("Field `{$field}` in model `{$model}` not available for translation.");
+		}
+		return !empty($entity->i18n[$field]);
+	}
+
 	protected static function _save($model, $behavior) {
 		$model::applyFilter('save', function($self, $params, $chain) use ($model, $behavior) {
-			$entity = $params['entity'];
-			$fields = $behavior->config('fields');
-			$default = $behavior->config('default');
-			$locales = $behavior->config('locales');
+			$entity =& $params['entity'];
 
 			if ($params['data']) {
 				$entity->set($params['data']);
 				$params['data'] = null;
 			}
 
-			// Add errors to locale and return if locale has not been set or locale separated
-			// content.
-			if (!isset($entity->locale)) {
-				$localePresent = array_map(
-					function($key) use ($entity) {
-						return array_key_exists($key, $entity->data());
-					}, $locales);
-				if (!in_array(true, $localePresent) && !isset($default)) {
-					$entity->errors('locale', 'Locale has not been set.');
-					return false;
-				}
-				if (!in_array(true, $localePresent) && isset($default)) {
-					$entity->locale = $default;
-				}
+			// When no i18n is present, we don't have to do anything.
+			if (!$entity->i18n) {
+				return $chain->next($self, $params, $chain);
 			}
-
-			$fields[] = 'locale';
-			$entityData = $entity->data();
-
-			$processFields = function($fields, $entityData, $locale) use ($entity) {
-				$data = [];
-				$entityData['locale'] = $locale;
-
-				// Add to data directly from the entity data or from the presaved localization.
-				// Data is only added from the translatable fields
-				foreach($fields as $key) {
-
-					// If the key is available
-					if(isset($entityData[$key])) {
-						$data[$key] = $entityData[$key];
-					}
-
-					// If the key part of localizations
-					if(isset($entityData[$key]) && isset($entityData['localizations'])) {
-						foreach($entityData['localizations'] as $key => $localized) {
-							if(isset($localized[$key]) && $localized['locale'] == $locale){
-								$data[$key] = $localized[$key];
-							}
-						}
-					}
-				}
-				return $data;
-			};
-
-			// Sort out the data from individual locale save mode and multiple
-			// exists. If the localization doesn't exist we add the data to the localization array.
-			if (isset($entity->locale)) {
-				$validation_locale = $entity->locale;
-				$data = $processFields($fields, $entityData, $validation_locale);
-			}
-			else {
-				$validation_locale = $default;
-				$entityLocalizedSet = [];
-				$saveLocalizations = [];
-				foreach($locales as $locale){
-					if (isset($entityData[$locale])) {
-						$saveLocalizations[] = $locale;
-						if ($entity->_id) {
-							$entityLocalizedSet[$locale] = $processFields($fields, $entityData[$locale], $locale);
-						}
-						else{
-							$entityLocalizedSet[] = $processFields($fields, $entityData[$locale], $locale);
-						}
-					}
-					unset($entity->$locale);
-				}
-			}
+			$config = $behavior->config();
+			$entity = static::_sync($entity, $config['fields'], $config['locale']);
 
 			// Should the record exist we need overwrite the localized data if the localization already
 			// exists. If the localization doesn't exist we add the data to the localization array.
-			$localizedSet = [];
-			$dbLocalizations = [];
-			if ($entity->exists() && $record = $self::find(
-				(string) $entity->_id, ['Ignore-Locale'=> true]
-			)) {
-				foreach($record->localizations as $localization) {
-					$locale = $localization->locale;
-					$dbLocalizations[] = $locale;
-					if (!isset($entityLocalizedSet[$locale]) && $locale != $data['locale']) {
-						$localizedSet[] = $localization->to('array');
-					}
-					else {
-						if (isset($entityLocalizedSet[$locale])) {
-							$data = $entityLocalizedSet[$locale];
+			$key = $model::key();
+
+			if ($entity->exists() && $config['strategy'] == 'nested') {
+				$original = $model::find('first', [
+					'conditions' => [$key => $entity->{$key}],
+					'fields' => $config['fields'],
+					'translate' => true
+				]);
+
+				// Augment the to-be-saved translation with existing ones.
+				// Otherwise Mongo would override the entire array.
+				foreach ($original->i18n as $field => $translations) {
+					foreach ($translations as $locale => $value) {
+						if (empty($entity->i18n[$field][$locale])) {
+							$entity->i18n[$field][$locale] = $value;
 						}
-						if (isset($data['localizations'])) {
-							unset($data['localizations']);
-						}
-						$data += $localization->to('array');
-						$localizedSet[] = $data;
 					}
 				}
 			}
+			$entity = static::_thin($entity, $config['fields'], $config['locale']);
+			// After thinning there might not be anything left.
 
-			// If the locale has not been picked up in previously saved localizations
-			// regular save fits into this category.
-			if (!isset($entityLocalizedSet) && !in_array($validation_locale, $dbLocalizations)) {
-				$localizedSet[] = $data;
-			}
-
-			// If saving multiple translations at once
-			if (!$entity->_id && isset($entityLocalizedSet)) {
-				$localizedSet = $entityLocalizedSet;
-			}
-
-			// If updating multiple translations at once, we need to add the translations
-			// that are still not yet covered from the update information
-			if ($entity->_id  && isset($entityLocalizedSet)) {
-				$toAdd = array_diff($saveLocalizations, $dbLocalizations);
-				foreach($toAdd as $locale) {
-					$localizedSet[] = $entityLocalizedSet[$locale];
+			// Map back fields for inline strategy.
+			if ($config['strategy'] === 'inline') {
+				foreach ($entity->i18n as $field => $locales) {
+					foreach ($locales as $locale => $value) {
+						// After thinning the default locale isn't
+						// contained inside the i18n key anymore. So
+						// we just have to handle one case here.
+						$inline = static::_composeField($field, $locale);
+						$entity->{$inline} = $value;
+					}
 				}
+				unset($entity->i18n);
 			}
-
-			$entity->localizations = $localizedSet;
-			$entity->validation = $validation_locale;
-
-			unset($entity->$validation_locale);
-
-			foreach($fields as $key){
-				unset($entity->$key);
-			}
-
-			$params['entity'] = $entity;
-
 			return $chain->next($self, $params, $chain);
 		});
 	}
 
-	/**
-	 * A protected function to apply our filter to the classes find method.
-	 * We grab the document from the documents as needed and pass them to you in language specific
-	 * output. If you pass a locale option we return only the document for that locale. If you only
-	 * want to search a locale but return all locales then pass locale as a condition.
-	 */
 	protected static function _find($model, $behavior) {
 		$model::applyFilter('find', function($self, $params, $chain) use ($behavior) {
-			$fields = $behavior->config('fields');
+			$config = $behavior->config();
 
-			if (isset($params['options']['Ignore-Locale'])) {
-				unset($params['options']['Ignore-Locale']);
-				return $chain->next($self, $params, $chain);
+			if (isset($params['options']['translate'])) {
+				if ($params['options']['translate'] === false) {
+					unset($params['options']['translate']);
+					return $chain->next($self, $params, $chain);
+				}
 			}
+			// Rewrite all dot syntaxed paths conditions when using the inline
+			// strategy, mapping to actual field names. Models using the nested
+			// strategy are assumed to *natively* handle these conditions i.e MongoDB.
+			//
+			// FIXME Currently supports just 1-level deep condition simple keys.
+			if (isset($params['options']['conditions']) && $config['strategy'] === 'inline') {
+				$conditions = [];
 
-			if (isset($params['options']['locale'])) {
-				$params['options']['conditions']['locale'] = $params['options']['locale'];
+				foreach ($params['options']['conditions'] as $key => $value) {
+					$regex = '/i18n\.([a-z0-9_]+)\.([a-z_]{2,5})/is';
+
+					if (strpos($key, 'i18n.') === 0 && preg_match($regex, $key, $matches)) {
+						$key = static::_composeField($matches[1], $matches[2]);
+					}
+					$conditions[$key] = $value;
+				}
+				$params['options']['conditions'] = $conditions;
 			}
-
-			// Need to parse the options find options as needed to keep
-			$options = static::_parseOptions($params['options'], $fields, $locales);
-			$params['options'] = $options;
 			$result = $chain->next($self, $params, $chain);
 
-			$options += $fields;
+			$format = function($entity) use ($config) {
+				if ($config['strategy'] === 'nested') {
+					$entity->i18n = $entity->i18n->data();
+				} else {
+					$entity->i18n = [];
+				}
+				foreach ($config['fields'] as $field) {
+					foreach ($config['locales'] as $locale) {
+						if ($locale === $config['locale']) {
+							$entity->i18n[$field][$locale] = $entity->{$field};
+							// The nested strategy should already have all translation ready
+							// in the i18n array except the non-redundant fields.
+						} elseif ($config['strategy'] === 'inline') {
+							$inline = static::_composeField($field, $locale);
+							$entity->i18n[$field][$locale] = $entity->{$inline};
 
-			// If this is an integer result send it back as it is.
-			if (is_int($result)) {
-				return $result;
+							// In order to lower confusion as what happens assinging
+							// values to inline fields directly we'll remove them here.
+							unset($entity->{"i18n_{$field}_{$locale}"});
+						}
+					}
+				}
+			};
+			if (is_object($result) && is_a($result, '\lithium\data\Collection')) {
+				return $result->each($format);
 			}
-
-			// Otherwise send it to the result parser which will output it as needed.
-			$function = static::_formatReturnDocument($options, $fields);
-			if ($params['type'] == 'all' || $params['type'] == 'search') {
-				$result->each($function);
-				return $result;
-			}
-			return $function($result);
+			return $format($result);
 		});
 	}
 
-	/**
-	 * A protected method to override model validates.
-	 * We take a validation key to get get the record we want to validate, this could be hard in the
-	 * case of multi locale saving. But I think we really need to do 1 at a time.
-	 */
 	protected static function _validates($model, $behavior) {
 		$model::applyFilter('validates', function($self, $params, $chain) {
-			$origEntity = $params['entity'];
-			$entity = clone $params['entity'];
-			foreach($entity->localizations as $localization) {
+			if (!$entity->i18n) {
+				// When no i18n is present, we don't have to do anything.
+				return $chain->next($self, $params, $chain);
+			}
+			$config = $behavior->config();
+			$entity = static::_sync($entity, $config['fields'], $config['locale']);
 
-				$isValidationLocale = ($localization->locale == $entity->validation);
+			// Validate original fields, as well as any translation
+			// that are present. By default translation are sparse
+			// and cannot be *required*.
+			$rules =& $params['options']['rules'];
 
-				if (isset($entity->validation) && $isValidationLocale && is_object($localization)) {
-					foreach($localization->data() as $key => $value) {
-						$entity->$key = $value;
-					}
-					unset($entity->localizations);
+			foreach ($config['fields'] as $field) {
+				if (!isset($rules[$field])) {
+					continue;
 				}
-				$params['entity'] = $entity;
+				foreach ($config['locales'] as $locale) {
+					if ($locale === $config['locale']) {
+						continue;
+					}
+					$inline = static::_composeField($field, $locale, '.');
+
+					if (isset($rules[$inline])) {
+						continue;
+					}
+					$rules[$inline] = $rules[$field];
+				}
 			}
-			$result = $chain->next($self, $params, $chain);
-			$errors = $params['entity']->errors();
-			if (!empty($origEntity)) {
-			 $origEntity->errors($params['entity']->errors());
+			foreach ($rules as $field => $rule) {
+				if (strpos($field, 'i18n') === false) {
+					continue;
+				}
+				foreach ($rule as &$r) {
+					$r['required'] = false;
+				}
 			}
-			return $result;
+			return $chain->next($self, $params, $chain);
 		});
 	}
 
-	/**
-	 * Returns a closure that formats the returned document to either include all locales
-	 * or to just to return the single record output.
-	 *
-	 * @param array $options Original find options to mainly get the locale needed to return
-	 * @param array $fields The fields to which translatability is applies
-	 * @return closure Contains logic needed to parse a single result correctly.
-	 */
-	protected static function _formatReturnDocument($options, $fields) {
-		return function($result) use ($options, $fields) {
-			if (!is_object($result) && !isset($result->localizations)) {
-				return $result;
-			}
-			foreach($result->localizations as $localization) {
-				$localizationData = $localization->data();
-				if(!empty($localizationData)) {
-					$locale = $localization->locale;
-					$fields[] = 'locale';
-
-					if (isset($options['locale']) && $options['locale'] == $locale) {
-						foreach($fields as $key){
-							$result->$key = $localization->$key;
-						}
-						return $result;
-					}
-					$result->$locale = $localization;
+	// Sync in both directions.
+	protected function _sync($entity, $fields, $locale) {
+		foreach ($entity->i18n as $key => $value) {
+			foreach ($value as $k => $v) {
+				if ($k === $locale) {
+					$entity->{$key} = $v;
 				}
-			}
-			return $result;
-		};
-	}
-
-	/**
-	 * Formats the options to allow for our schema tweaked method of searching data.
-	 *
-	 * @param array $options Original find options to mainly get the locale needed to return
-	 * @param array $fields The fields to which translatability is applies
-	 * @return array The parsed options.
-	 */
-	protected static function _parseOptions($options, $fields, $locales) {
-		$subdocument = 'localizations.';
-		$array = [];
-
-		foreach ($options as $option => $values) {
-			if (is_array($values) && !empty($values)) {
-				foreach ($values as $key => $args) {
-
-					// If option has an argument key that starts with a localization
-					$hasLocalizedKey = (in_array(true, array_map( function($localization) use ($key) {
-						return (strpos($key, $localization . '.') !== false);
-					}, $locales)));
-
-					if($hasLocalizedKey) {
-						list($locale, $optionKey) = explode('.', $key);
-						$array[$option][$subdocument . $optionKey] = $args;
-						$array[$option][$subdocument . 'locale'] = $locale;
-					}
-
-					// If the option is part of the localized fields
-					$isLocalized = (in_array($key, $fields) || $key == 'locale');
-					if ($isLocalized) {
-						$array[$option][$subdocument . $key] = $args;
-					}
-
-					if (!$isLocalized && !$hasLocalizedKey) {
-						$array[$option][$key] = $args;
-					}
-				}
-			}
-			else {
-				$array[$option] = $values;
 			}
 		}
-		return $array;
+		foreach ($fields as $field) {
+			if (!empty($entity->{$field})) {
+				$entity->i18n[$field][$locale] = $entity->{$field};
+			}
+		}
+		return $entity;
+	}
+
+	// In order to not save redundant data, we'll remove
+	// the default locale translations from the i18n array.
+	protected function _thin($entity, $fields, $locale) {
+		foreach ($fields as $field) {
+			if (isset($entity->i18n[$field][$locale])) {
+				$entity->{$field} = $entity->i18n[$field][$locale];
+				unset($entity->i18n[$field][$locale]);
+			}
+			if (empty($entity->i18n[$field])) {
+				unset($entity->i18n[$field]);
+			}
+		}
+		return $entity;
+	}
+
+	protected static function _composeField($field, $locale, $separator = '_') {
+		return "i18n{$separator}{$field}{$separator}{$locale}";
 	}
 }
 
