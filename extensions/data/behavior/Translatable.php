@@ -10,6 +10,8 @@ namespace li3_translate\extensions\data\behavior;
 
 use Exception;
 use lithium\core\Environment;
+use lithium\data\Entity;
+use li3_behaviors\data\model\Behavior;
 
 /**
  * The `Translateable` class handles all translating based content, the data is placed into a
@@ -30,7 +32,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		'strategy' => null // either `inline` or `nested`
 	];
 
-	protected static function _config($model, $behavior, $config, $defaults) {
+	protected static function _config($model, Behavior $behavior, array $config, array $defaults) {
 		$config += $defaults;
 
 		if (!$config['locale']) {
@@ -59,13 +61,13 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		return $config;
 	}
 
-	protected static function _filters($model, $behavior) {
+	protected static function _filters($model, Behavior $behavior) {
 		static::_save($model, $behavior);
 		static::_find($model, $behavior);
 		static::_validates($model, $behavior);
 	}
 
-	public function translate($model, $behavior, $entity, $field, $locale = null, $value = null) {
+	public function translate($model, Behavior $behavior, Entity $entity, $field, $locale = null, $value = null) {
 		$config = $behavior->config();
 
 		if (!in_array($field, $config['fields'])) {
@@ -97,14 +99,11 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		return true;
 	}
 
-	public function isTranslated($model, $behavior, $entity, $field) {
-		if (!in_array($field, $behavior->config('fields'))) {
-			throw new Exception("Field `{$field}` in model `{$model}` not available for translation.");
-		}
-		return !empty($entity->i18n[$field]);
+	public function isTranslated($model, Behavior $behavior, Entity $entity, $field) {
+		return in_array($field, $behavior->config('fields'));
 	}
 
-	protected static function _save($model, $behavior) {
+	protected static function _save($model, Behavior $behavior) {
 		$model::applyFilter('save', function($self, $params, $chain) use ($model, $behavior) {
 			$entity =& $params['entity'];
 
@@ -134,13 +133,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 
 				// Augment the to-be-saved translation with existing ones.
 				// Otherwise Mongo would override the entire array.
-				foreach ($original->i18n as $field => $translations) {
-					foreach ($translations as $locale => $value) {
-						if (empty($entity->i18n[$field][$locale])) {
-							$entity->i18n[$field][$locale] = $value;
-						}
-					}
-				}
+				$entity = static::_augmentMissing($original, $entity, $config);
 			}
 			$entity = static::_thin($entity, $config['fields'], $config['locale']);
 			// After thinning there might not be anything left.
@@ -162,7 +155,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		});
 	}
 
-	protected static function _find($model, $behavior) {
+	protected static function _find($model, Behavior $behavior) {
 		$model::applyFilter('find', function($self, $params, $chain) use ($behavior) {
 			$config = $behavior->config();
 
@@ -203,13 +196,15 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			}
 			$result = $chain->next($self, $params, $chain);
 
-			$format = function($entity) use ($config, $translate) {
+			$format = function(Entity $entity) use ($config, $translate) {
 				if ($config['strategy'] === 'nested') {
 					$entity->set(['i18n' => $entity->i18n->data()]);
 				} else {
 					$entity->set(['i18n' => []]);
 				}
 				$entity = static::_syncToI18n($entity, $config);
+				$entity = static::_augmentMissing($entity, $entity, $config);
+
 
 				if (is_string($translate)) {
 					foreach ($entity->i18n as $field => $locales) {
@@ -235,7 +230,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		});
 	}
 
-	protected static function _validates($model, $behavior) {
+	protected static function _validates($model, Behavior $behavior) {
 		$model::applyFilter('validates', function($self, $params, $chain) {
 			if (!$entity->i18n) {
 				// When no i18n is present, we don't have to do anything.
@@ -281,7 +276,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	// In order to allow access to both sides of fields (inside i18n and outside),
 	// we link those fields together. However one shouldn't assume that composed
 	// fields are available always.
-	protected static function _syncToI18n($entity, $config) {
+	protected static function _syncToI18n(Entity $entity, array $config) {
 		foreach ($config['fields'] as $field) {
 			if (!isset($entity->{$field})) {
 				continue;
@@ -300,7 +295,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		return $entity;
 	}
 
-	protected static function _syncFromI18n($entity, $config) {
+	protected static function _syncFromI18n(Entity $entity, array $config) {
 		foreach ($config['fields'] as $field) {
 			foreach ($config['locales'] as $locale) {
 				if (!isset($entity->i18n[$field][$locale])) {
@@ -325,7 +320,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 
 	// In order to not save redundant data, we'll remove
 	// the default locale translations from the i18n array.
-	protected static function _thin($entity, $fields, $locale) {
+	protected static function _thin(Entity $entity, array $fields, $locale) {
 		foreach ($fields as $field) {
 			if (isset($entity->i18n[$field][$locale])) {
 				$entity->{$field} = $entity->i18n[$field][$locale];
@@ -340,6 +335,21 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 
 	protected static function _composeField($field, $locale, $separator = '_') {
 		return "i18n{$separator}{$field}{$separator}{$locale}";
+	}
+
+	protected static function _augmentMissing(Entity $from, Entity $to, array $config) {
+		foreach ($config['fields'] as $field) {
+			foreach ($config['locales'] as $locale) {
+				if (!isset($to->i18n[$field]) || !array_key_exists($locale, $to->i18n[$field])) {
+					if (isset($from->i18n[$field][$locale])) {
+						$to->i18n[$field][$locale] = $from->i18n[$field][$locale];
+					} else {
+						$to->i18n[$field][$locale] = null;
+					}
+				}
+			}
+		}
+		return $to;
 	}
 }
 
