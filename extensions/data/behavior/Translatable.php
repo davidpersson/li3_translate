@@ -210,7 +210,6 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 				$entity = static::_syncToI18n($entity, $config);
 				$entity = static::_augmentMissing($entity, $entity, $config);
 
-
 				if (is_string($translate)) {
 					foreach ($entity->i18n as $field => $locales) {
 						foreach ($locales as $locale => $value) {
@@ -236,7 +235,9 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _validates($model, Behavior $behavior) {
-		$model::applyFilter('validates', function($self, $params, $chain) {
+		$model::applyFilter('validates', function($self, $params, $chain) use ($behavior) {
+			$entity =& $params['entity'];
+
 			if (!$entity->i18n) {
 				// When no i18n is present, we don't have to do anything.
 				return $chain->next($self, $params, $chain);
@@ -286,9 +287,11 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	// In order to allow access to both sides of fields (inside i18n and outside),
 	// we link those fields together. However one shouldn't assume that composed
 	// fields are available always.
+	//
+	// Note: This will establish references.
 	protected static function _syncToI18n(Entity $entity, array $config) {
 		foreach ($config['fields'] as $field) {
-			if (!isset($entity->{$field})) {
+			if (empty($entity->{$field})) {
 				continue;
 			}
 			foreach ($config['locales'] as $locale) {
@@ -305,6 +308,8 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 		return $entity;
 	}
 
+	// Note: This will *not* establish references, as we cannot assign by
+	// reference to overloaded object (Entity uses magic __set).
 	protected static function _syncFromI18n(Entity $entity, array $config) {
 		foreach ($config['fields'] as $field) {
 			foreach ($config['locales'] as $locale) {
@@ -312,16 +317,16 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					continue;
 				}
 				if ($locale === $config['locale']) {
-					$entity->{$field} =& $entity->i18n[$field][$locale];
+					$entity->{$field} = $entity->i18n[$field][$locale];
 
 					if ($config['strategy'] == 'nested') {
-						// For this strategy not fields are stored outside i18n,
+						// For this strategy no fields are stored outside i18n,
 						// except the original field.
 						break;
 					}
 				} elseif ($config['strategy'] === 'inline') {
 					$inline = static::_composeField($field, $locale);
-					$entity->{$inline} =& $entity->i18n[$field][$locale];
+					$entity->{$inline} = $entity->i18n[$field][$locale];
 				}
 			}
 		}
