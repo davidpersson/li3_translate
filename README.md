@@ -180,7 +180,4 @@ Translation data is stored inline with the entity. For MongoDB a subdocument wil
 You should not change the locale when the model already has saved data. Otherwise manual
 migration will be required.
 
-Bugs etc
---------
-
 I have yet tested this plugin for white lists and other features. If you find a case that doesn't work then please log an issue.
