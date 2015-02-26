@@ -74,7 +74,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			throw new Exception("Field `{$field}` in model `{$model}` not available for translation.");
 		}
 		if ($locale === null) {
-			return $entity->i18n;
+			return $entity->i18n[$field];
 		}
 		if (!in_array($locale, $config['locales'])) {
 			throw new Exception("Locale `{$locale}` not setup for translation of field `{$field}` in `{$model}`.");
