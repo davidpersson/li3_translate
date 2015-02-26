@@ -120,6 +120,11 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			$entity = static::_syncFromI18n($entity, $config);
 			$entity = static::_syncToI18n($entity, $config);
 
+			if ($diff = array_diff(array_keys($entity->i18n), $config['fields'])) {
+				"Unknown translated field/s `" . implode(', ', $diff); "`.";
+				throw new Exception($message);
+			}
+
 			// Should the record exist we need overwrite the localized data if the localization already
 			// exists. If the localization doesn't exist we add the data to the localization array.
 			$key = $model::key();
@@ -239,6 +244,11 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			$config = $behavior->config();
 			$entity = static::_syncFromI18n($entity, $config);
 			$entity = static::_syncToI18n($entity, $config);
+
+			if ($diff = array_diff(array_keys($entity->i18n), $config['fields'])) {
+				"Unknown translated field/s `" . implode(', ', $diff); "`.";
+				throw new Exception($message);
+			}
 
 			// Validate original fields, as well as any translation
 			// that are present. By default translation are sparse
