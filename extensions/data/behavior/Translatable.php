@@ -135,7 +135,6 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			}
 			$config = $behavior->config();
 			$entity = static::_syncFromI18n($entity, $config);
-			$entity = static::_syncToI18n($entity, $config);
 
 			if ($diff = array_diff(array_keys($entity->i18n), $config['fields'])) {
 				"Unknown translated field/s `" . implode(', ', $diff); "`.";
@@ -261,7 +260,6 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			}
 			$config = $behavior->config();
 			$entity = static::_syncFromI18n($entity, $config);
-			$entity = static::_syncToI18n($entity, $config);
 
 			if ($diff = array_diff(array_keys($entity->i18n), $config['fields'])) {
 				"Unknown translated field/s `" . implode(', ', $diff); "`.";
