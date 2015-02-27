@@ -101,7 +101,8 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			$config = $behavior->config();
 			$entity = $chain->next($self, $params, $chain);
 
-			if (!$entity) {
+			if (!$entity || !is_a($entity, 'Entity')) {
+				// We may also receive Collections here.
 				return $entity;
 			}
 
