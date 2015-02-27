@@ -62,6 +62,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _filters($model, Behavior $behavior) {
+		static::_create($model, $behavior);
 		static::_save($model, $behavior);
 		static::_find($model, $behavior);
 		static::_validates($model, $behavior);
@@ -90,17 +91,32 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			}
 			return $entity->i18n[$field][$locale];
 		}
-		if (!isset($entity->i18n)) {
-			// FIXME Move this into create filter?
-			$entity->i18n = [];
-		}
 		$entity->i18n[$field][$locale] = $value;
 
 		return true;
 	}
 
-	public function isTranslated($model, Behavior $behavior, Entity $entity, $field) {
-		return in_array($field, $behavior->config('fields'));
+	protected static function _create($model, Behavior $behavior) {
+		$model::applyFilter('create', function($self, $params, $chain) use ($model, $behavior) {
+			$config = $behavior->config();
+			$entity = $chain->next($self, $params, $chain);
+
+			if (!$entity) {
+				return $entity;
+			}
+
+			if (!isset($entity->i18n)) {
+				if ($config['strategy'] === 'nested') {
+					$entity->set(['i18n' => $entity->i18n->data()]);
+				} else {
+					$entity->set(['i18n' => []]);
+				}
+			}
+			$entity = static::_syncToI18n($entity, $config);
+			$entity = static::_augmentMissing($entity, $entity, $config);
+
+			return $entity;
+		});
 	}
 
 	protected static function _save($model, Behavior $behavior) {
