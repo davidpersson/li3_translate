@@ -170,7 +170,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 						$entity->{$inline} = $value;
 					}
 				}
-				unset($entity->i18n);
+				// unset($entity->i18n);
 			}
 			return $chain->next($self, $params, $chain);
 		});
@@ -235,8 +235,8 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 						}
 					}
 					// FIXME also unset inlined fields.
-					// unset($entity->i18n);
 					$entity->i18n = null;
+					unset($entity->i18n);
 				}
 				return $entity;
 			};
@@ -316,7 +316,15 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					// in the i18n array except the non-redundant fields.
 				} elseif ($config['strategy'] === 'inline') {
 					$inline = static::_composeField($field, $locale);
-					$entity->i18n[$field][$locale] =& $entity->{$inline};
+					if (empty($entity->{$inline})) {
+						$entity->{$inline} = 'FOO';
+
+						$entity->i18n[$field][$locale] =& $entity->{$inline};
+
+						$entity->{$inline} = null;
+					} else {
+						$entity->i18n[$field][$locale] =& $entity->{$inline};
+					}
 				}
 			}
 		}
