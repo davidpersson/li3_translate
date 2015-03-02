@@ -177,7 +177,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _find($model, Behavior $behavior) {
-		$model::applyFilter('find', function($self, $params, $chain) use ($behavior) {
+		$model::applyFilter('find', function($self, $params, $chain) use ($model, $behavior) {
 			$config = $behavior->config();
 
 			if (!isset($params['options']['translate'])) {
