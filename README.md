@@ -1,11 +1,8 @@
 # Translatable Behavior
-### for the Lithium PHP Framework
 
-What this behavior does is enable you to have content of different locales/languages to be stored in your MongoDB database via your lithium based model. You can also search and retrieve locale specific data simply. 
+What this behavior does is enable you to have content of different locales/languages to be stored in your database via your lithium based model. You can also search and retrieve locale specific data simply. 
 
-* At this moment the plugin is only compatible with MongoDB.
-
-If somebody wanted to make it adaptable then other data sources could be supported in the future.
+_At this moment the plugin is compatible with MongoDB and all relational databases supported by lithium._
 
 ## Installation
 
@@ -157,7 +154,6 @@ $user = Users::create([
 $user->validate(['translate' => false]);
 
 ```
-
 
 ## Data Model
 
