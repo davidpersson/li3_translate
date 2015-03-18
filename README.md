@@ -159,14 +159,14 @@ $user->validate(['translate' => false]);
 
 Translation data is stored inline with the entity. For MongoDB a subdocument will used, for relational databases special field names are used. 
 
-`<user>`
+- `<user>`
 	- `name => Richard`
 	- `profile`
 	- `<i18n>`
 		- `name`
 			- `it => Ricardo`
 
-`<user>`
+- `<user>`
 	- `name => Richard`
 	- `profile`
 	- `i18n_name_it => Ricardo`
