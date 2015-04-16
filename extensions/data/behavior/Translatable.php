@@ -11,6 +11,7 @@ namespace li3_translate\extensions\data\behavior;
 use Exception;
 use lithium\core\Environment;
 use lithium\data\Entity;
+use lithium\data\Collection;
 use li3_behaviors\data\model\Behavior;
 
 /**
@@ -101,7 +102,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			$config = $behavior->config();
 			$entity = $chain->next($self, $params, $chain);
 
-			if (!$entity || !is_a($entity, 'Entity')) {
+			if (!$entity || !($entity instanceof Entity)) {
 				// We may also receive Collections here.
 				return $entity;
 			}
@@ -243,7 +244,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			if (!is_object($result)) {
 				return $result;
 			}
-			if (is_a($result, '\lithium\data\Collection')) {
+			if ($result instanceof Collection) {
 				return $result->each($format);
 			}
 			return $format($result);
