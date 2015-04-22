@@ -194,27 +194,33 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					}
 				}
 			}
-			// Rewrite all dot syntaxed paths conditions when using the inline
+			// Rewrite all dot syntaxed paths conditions and order when using the inline
 			// strategy, mapping to actual field names. Models using the nested
 			// strategy are assumed to *natively* handle these conditions i.e MongoDB.
 			//
-			// FIXME Currently supports just 1-level deep condition simple keys.
-			if (isset($params['options']['conditions']) && $config['strategy'] === 'inline') {
-				$conditions = [];
-
-				foreach ($params['options']['conditions'] as $key => $value) {
-					$regex = '/i18n\.([a-z0-9_]+)\.([a-z_]{2,5})/is';
-
-					if (strpos($key, 'i18n.') === 0 && preg_match($regex, $key, $matches)) {
-						if ($config['locale'] === $matches[2]) {
-							$key = $matches[1];
-						} else {
-							$key = static::_composeField($matches[1], $matches[2]);
-						}
+			// FIXME Currently supports just 1-level deep condition simple keys. For order
+			//       items must be in `['title' => 'DESC']` format.
+			if ($config['strategy'] === 'inline') {
+				foreach (['conditions', 'order'] as $queryField) {
+					if (!isset($params['options'][$queryField])) {
+						continue;
 					}
-					$conditions[$key] = $value;
+					$formatted = [];
+
+					foreach ($params['options'][$queryField] as $key => $value) {
+						$regex = '/i18n\.([a-z0-9_]+)\.([a-z_]{2,5})/is';
+
+						if (strpos($key, 'i18n.') === 0 && preg_match($regex, $key, $matches)) {
+							if ($config['locale'] === $matches[2]) {
+								$key = $matches[1];
+							} else {
+								$key = static::_composeField($matches[1], $matches[2]);
+							}
+						}
+						$formatted[$key] = $value;
+					}
+					$params['options'][$queryField] = $formatted;
 				}
-				$params['options']['conditions'] = $conditions;
 			}
 			$result = $chain->next($self, $params, $chain);
 
