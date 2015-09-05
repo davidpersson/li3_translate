@@ -5,7 +5,6 @@
     "keywords": ["translate", "g11n", "behavior", "lithium", "li3", "php"],
     "homepage": "https://github.com/davidpersson/li3_translate",
     "license": "BSD-3-Clause",
-    "minimum-stability": "dev",
     "authors": [
         {
             "name": "David Persson",
@@ -18,8 +17,8 @@
     ],
     "require": {
         "php": ">=5.5",
-		"unionofrad/lithium": "*",
-        "davidpersson/li3_behaviors":  "2.*",
-        "composer/installers": "~1.0"
+		"unionofrad/lithium": "1.0.*@RC",
+        "davidpersson/li3_behaviors":  "2.0.*@beta",
+        "composer/installers": "1.*"
     }
 }
