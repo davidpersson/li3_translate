@@ -18,7 +18,7 @@
     "require": {
         "php": ">=5.5",
 		"unionofrad/lithium": "1.0.*@RC",
-        "davidpersson/li3_behaviors":  "2.0.*@beta",
+        "davidpersson/li3_behaviors":  "2.0.*",
         "composer/installers": "1.*"
     }
 }
