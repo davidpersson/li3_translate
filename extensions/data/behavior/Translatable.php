@@ -313,7 +313,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	// Note: This will establish references.
 	protected static function _syncToI18n(Entity $entity, array $config) {
 		foreach ($config['fields'] as $field) {
-			if (empty($entity->{$field})) {
+			if ($entity->{$field} === null) {
 				continue;
 			}
 			foreach ($config['locales'] as $locale) {
