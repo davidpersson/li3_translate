@@ -9,6 +9,7 @@
 namespace li3_translate\extensions\data\behavior;
 
 use Exception;
+use lithium\aop\Filters;
 use lithium\core\Environment;
 use lithium\data\Entity;
 use lithium\data\Collection;
@@ -98,9 +99,9 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _create($model, Behavior $behavior) {
-		$model::applyFilter('create', function($self, $params, $chain) use ($model, $behavior) {
+		Filters::apply($model, 'create', function($params, $next) use ($model, $behavior) {
 			$config = $behavior->config();
-			$entity = $chain->next($self, $params, $chain);
+			$entity = $next($params);
 
 			if (!$entity || !($entity instanceof Entity)) {
 				// We may also receive Collections here.
@@ -122,7 +123,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _save($model, Behavior $behavior) {
-		$model::applyFilter('save', function($self, $params, $chain) use ($model, $behavior) {
+		Filters::apply($model, 'save', function($params, $next) use ($model, $behavior) {
 			$entity =& $params['entity'];
 
 			if ($params['data']) {
@@ -132,7 +133,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 
 			// When no i18n is present, we don't have to do anything.
 			if (!$entity->i18n) {
-				return $chain->next($self, $params, $chain);
+				return $next($params);
 			}
 			$config = $behavior->config();
 			$entity = static::_syncFromI18n($entity, $config);
@@ -173,12 +174,12 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 				}
 				// unset($entity->i18n);
 			}
-			return $chain->next($self, $params, $chain);
+			return $next($params);
 		});
 	}
 
 	protected static function _find($model, Behavior $behavior) {
-		$model::applyFilter('find', function($self, $params, $chain) use ($model, $behavior) {
+		Filters::apply($model, 'find', function($params, $next) use ($model, $behavior) {
 			$config = $behavior->config();
 
 			if (!isset($params['options']['translate'])) {
@@ -186,7 +187,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 			} else {
 				if (($translate = $params['options']['translate']) === false) {
 					unset($params['options']['translate']);
-					return $chain->next($self, $params, $chain);
+					return $next($params);
 				}
 				if (is_string($translate)) {
 					if (!in_array($translate, $config['locales'])) {
@@ -222,7 +223,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					$params['options'][$queryField] = $formatted;
 				}
 			}
-			$result = $chain->next($self, $params, $chain);
+			$result = $next($params);
 
 			$format = function(Entity $entity) use ($config, $translate) {
 				if ($config['strategy'] === 'nested') {
@@ -258,12 +259,12 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 	}
 
 	protected static function _validates($model, Behavior $behavior) {
-		$model::applyFilter('validates', function($self, $params, $chain) use ($behavior) {
+		Filters::apply($model, 'validates', function($params, $next) use ($behavior) {
 			$entity =& $params['entity'];
 
 			if (!$entity->i18n) {
 				// When no i18n is present, we don't have to do anything.
-				return $chain->next($self, $params, $chain);
+				return $next($params);
 			}
 			$config = $behavior->config();
 			$entity = static::_syncFromI18n($entity, $config);
@@ -302,7 +303,7 @@ class Translatable extends \li3_behaviors\data\model\Behavior {
 					$r['required'] = false;
 				}
 			}
-			return $chain->next($self, $params, $chain);
+			return $next($params);
 		});
 	}
 
